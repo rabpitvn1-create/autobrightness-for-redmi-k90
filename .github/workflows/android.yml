@@ -1,0 +1,44 @@
+name: LuxGuard debug APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  debug-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile debug APK
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Verify APK file
+        run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LuxGuard-v0.1.0-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Publish debug GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=v0.1.0-debug
+          ASSET=app/build/outputs/apk/debug/app-debug.apk
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber
+          else
+            gh release create "$TAG" "$ASSET" --target "$GITHUB_SHA" --prerelease \
+              --title "LuxGuard v0.1.0-debug" \
+              --notes "Internal debug test for Redmi K90 HyperOS 4. Debug-signed APK. On activation, switch to MANUAL and use lux-based brightness; explicit OFF restores original mode. No root, Magisk, ADB helper or third-party service. Hardware compatibility unverified."
+          fi
