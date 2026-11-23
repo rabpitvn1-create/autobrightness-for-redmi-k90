@@ -22,25 +22,25 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Compile debug APK
-        run: gradle --no-daemon :app:assembleDebug
+      - name: Test and compile debug APK
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
       - name: Verify APK file
         run: test -s app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: LuxGuard-v0.1.0-debug
+          name: LuxGuard-v0.1.1-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Publish debug GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG=v0.1.0-debug
+          TAG=v0.1.1-debug
           ASSET=app/build/outputs/apk/debug/app-debug.apk
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$ASSET" --clobber
           else
             gh release create "$TAG" "$ASSET" --target "$GITHUB_SHA" --prerelease \
-              --title "LuxGuard v0.1.0-debug" \
-              --notes "Internal debug test for Redmi K90 HyperOS 4. Debug-signed APK. On activation, switch to MANUAL and use lux-based brightness; explicit OFF restores original mode. No root, Magisk, ADB helper or third-party service. Hardware compatibility unverified."
+              --title "LuxGuard v0.1.1-debug (calibration)" \
+              --notes "Internal debug test. Removes invented brightness curve. Requires an on-device calibration against Xiaomi stock auto brightness, refuses untrusted/flat SCREEN_BRIGHTNESS samples and avoids extrapolation. Experimental: Settings brightness is not guaranteed to match physical brightness or nits. No root or helpers."
           fi

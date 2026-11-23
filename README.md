@@ -1,27 +1,26 @@
-# LuxGuard for Redmi K90 (HyperOS 4)
+# LuxGuard for Redmi K90 / HyperOS 4
 
-A small native Android application with exactly **one button**. The first tap activates a custom sensor-based brightness controller, targeting 85% of an explicitly defined lux-to-brightness reference curve. Tapping again turns it off.
+## v0.1.1-debug: real-device calibration, experimental
 
-## Important: actual system mode
+v0.1.0 incorrectly used an invented reference curve. The user measured the Xiaomi stock automatic brightness to be **darker** than v0.1.0 LuxGuard in similar conditions. v0.1.1 removes that curve completely and **refuses to control brightness without calibration on the device**.
 
-On successful activation, LuxGuard first saves the original `SCREEN_BRIGHTNESS_MODE` and `SCREEN_BRIGHTNESS` to private SharedPreferences. It then sets **SCREEN_BRIGHTNESS_MODE_MANUAL** and verifies the change before storing `enabled=true`. While enabled, the app uses the phone's ambient light sensor, a median filter, exponential smoothing, logarithmic lux interpolation and transition/dead-zone logic. It writes real `Settings.System.SCREEN_BRIGHTNESS` values and uses no overlay or Extra Dim.
+The APK presents one visible button. On initial tap it asks for Modify system settings permission, turns on Xiaomi Auto Brightness, and enters calibration mode. For each of at least eight distinct lighting environments, keep the phone still for 9+ seconds and tap the *same button* to record the ambient light sensor's lux value and `Settings.System.SCREEN_BRIGHTNESS`. Use a broad range from dark rooms to outdoor shade, NOT direct sunlight as a requirement. When eight valid distinct measurements have been collected, it builds a conservative stepwise lower envelope (a lower measured endpoint across each interval), takes floor(0.85 × max(1, observed brightness minus 2)) and turns on LuxGuard. During control, it switches the OEM mode to MANUAL, writes the actual system brightness, and restores AUTOMATIC on OFF. Long-press the same button **while disabled** to clear calibration and start over.
 
-On explicit OFF it stops the service and restores the saved brightness and the **previous mode**. When the original mode was AUTOMATIC, it returns to AUTOMATIC. If the original mode was MANUAL, it restores MANUAL.
+The calibration engine checks stable lux and brightness during each sampling window, stores samples, rejects duplicate lux, flat data and obviously nonmonotonic brightness samples. It requires at least eight different light levels and 20x lux coverage, and binds the profile to `Build.FINGERPRINT` with 30 day expiration. It never extrapolates beyond calibrated lux; when lux is outside that range or an invalid profile is detected, the service stops and restores the original Xiaomi auto mode. This protects against claims of unknown curve behavior.
 
-This replaces, rather than coexists with, the OEM auto-brightness controller. Reference curve points are design defaults, **not** extracted from Xiaomi's firmware. 85% refers to normalized brightness, **not** necessarily 85% of emitted nits. Manual overrides can train only toward lower brightness.
+**CRITICAL LIMITATION:** On Android, the public `SCREEN_BRIGHTNESS` setting does NOT promise to expose the final applied brightness in automatic mode. Passing the checks does not prove measured settings equal display hardware output or that all intermediate OEM values are monotonic. Manufacturer-specific auto brightness may be hysteretic, adaptive to manual changes, temperature, HBM, and display state. The 85% guarantee applies only to **measured setting-space samples and conservative assumptions**, not actual nits or every possible lux. **Do not claim a proved 15% reduction versus Xiaomi across all light levels.**
 
-## Install and use
+For independent testing, keep the same ambient setting stable and compare stock Auto (wait at least 10 seconds) against LuxGuard (same phone orientation and content). Repeat at 8+ tested lux levels. If Xiaomi is darker anywhere, **mark test failed**, disable LuxGuard and collect new measurements. A handheld lux meter or photometer can test physical luminance more accurately. The app intentionally has no user-configurable brightness multiplier until the OEM sampling mechanism is validated.
 
-Install the APK from the GitHub Release. Tap the one button to open Android's Modify system settings permission screen when needed. Grant the permission and return to LuxGuard. Approve notification permission if requested. On Xiaomi's app info screen, enable background autostart and set battery mode to unrestricted if your firmware provides those options. Neither privilege can be silently granted by an ordinary app.
+## Safety and lifecycle
 
-The notification comes from an Android foreground service and the app requests BOOT_COMPLETED recovery. This **cannot** guarantee recovery from Xiaomi force-stop, aggressive process killing, or Android's restrictions on starting foreground services after boot. In those cases reopen LuxGuard. Always switch OFF from the app before uninstalling if possible.
+- No root, Magisk, Shizuku, ADB helper, overlays, Extra Dim, or third-party runtime service.
+- Only Android APIs, `WRITE_SETTINGS`, `TYPE_LIGHT`, foreground service, notifications and boot broadcast.
+- The app cannot override HyperOS force-stop policy and must be reopened if forcibly stopped.
+- If the app is killed while active, its mode may remain MANUAL; re-open then tap OFF to restore.
+- In the Xiaomi settings enable background autostart and unrestricted battery when available.
+- Changes in firmware invalidate the stored profile automatically.
 
-## Debug build and release
+## Build
 
-GitHub Actions workflow `.github/workflows/android.yml` runs on pushes to `main` and manual dispatch. It uses JDK 17, Gradle 8.11.1, Android SDK 35, runs `gradle :app:assembleDebug`, uploads the APK artifact, and creates/updates GitHub prerelease **v0.1.0-debug** containing `app-debug.apk`, only after a successful build. Debug APKs are automatically debug-signed by Android Gradle Plugin.
-
-No root, Magisk, Shizuku, ADB helper, Tasker or external running application is required. The GitHub Actions build toolchain is a development-time dependency, not an on-device helper.
-
-## Known limits
-
-This is an internal experimental build, not a validated Redmi K90 release. Actual device tests are required for Xiaomi's display brightness handling, background lifecycle, screen-on sensing, notification policy, and sleep/wake behavior. Some apps or ROM features may temporarily override brightness. Force-stop may leave the system in manual mode until the user reopens the app and taps OFF. This utility is not a burn-in prevention guarantee.
+The Actions workflow runs `gradle :app:testDebugUnitTest :app:assembleDebug`, checks for an APK, attaches it as an Actions artifact and publishes GitHub prerelease `v0.1.1-debug` with APK attached. JDK 17, Android SDK 35 and Gradle 8.11.1. Debug signature only. No Play Store assets needed.
